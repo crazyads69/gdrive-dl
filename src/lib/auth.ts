@@ -69,7 +69,8 @@ function createOAuth2Client(): OAuth2Client {
 async function openBrowserAndWaitForCode(authUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const server = Bun.serve({
-      port: 0,
+      port: 8000,
+      hostname: "localhost",
       async fetch(req) {
         const url = new URL(req.url);
         const code = url.searchParams.get("code");
@@ -95,7 +96,12 @@ async function openBrowserAndWaitForCode(authUrl: string): Promise<string> {
       },
     });
 
-    const redirectUri = `http://localhost:${server.port}`;
+    if (!server.port) {
+      reject(new Error("Failed to start OAuth callback server"));
+      return;
+    }
+
+    const redirectUri = "http://localhost:8000";
     const finalUrl = authUrl.replace(/^http:\/\/localhost/, redirectUri);
 
     const cmd =
@@ -106,9 +112,11 @@ async function openBrowserAndWaitForCode(authUrl: string): Promise<string> {
 }
 
 async function startInteractiveAuth(client: OAuth2Client): Promise<OAuth2Client> {
+  const redirectUri = "http://localhost:8000";
   const authUrl = client.generateAuthUrl({
     access_type: "offline",
     scope: [...OAUTH_DEFAULTS.scopes],
+    redirect_uri: redirectUri,
     prompt: "consent",
   });
 

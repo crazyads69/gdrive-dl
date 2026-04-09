@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, readFile, stat } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import cliProgress from "cli-progress";
 import { Command } from "commander";
@@ -11,15 +11,7 @@ import {
   extractFolderId,
   listFolderFiles,
 } from "../lib/drive.ts";
-import {
-  IS_TTY,
-  logError,
-  logInfo,
-  logSpinner,
-  logSuccess,
-  logSummary,
-  logWarn,
-} from "../lib/logger.ts";
+import { IS_TTY, logError, logSpinner, logSummary, logWarn } from "../lib/logger.ts";
 import { matchFiles, normalizeToNfc } from "../lib/matcher.ts";
 import { writeReport } from "../lib/reporter.ts";
 import { sanitizeOutputPath, sanitizePathSegment } from "../lib/sanitizer.ts";
@@ -189,15 +181,22 @@ export const downloadCommand = new Command("download")
       let skipped = 0;
 
       if (!opts.dryRun) {
-        const progressBar = new cliProgress.SingleBar(
-          { format: "{bar} {percentage}% | {filename}", hideCursor: true },
-          cliProgress.Presets.shades_classic
-        );
-        if (IS_TTY) progressBar.start(matched.length, 0);
-        let completed = 0;
+        const totalSize = matched.reduce((sum, f) => sum + Number(f.size), 0);
+        const overallBar = IS_TTY
+          ? new cliProgress.SingleBar(
+              {
+                format: "Overall: {bar} {percentage}% | {value}/{total} bytes",
+                hideCursor: true,
+              },
+              cliProgress.Presets.shades_classic
+            )
+          : null;
+        overallBar?.start(totalSize, 0);
+
+        let totalBytesDownloaded = 0;
 
         await runWithConcurrency(
-          matched,
+          matched as DownloadItem[],
           concurrency,
           async (item: DownloadItem) => {
             if (isAborting) return;
@@ -218,16 +217,27 @@ export const downloadCommand = new Command("download")
                 retryCount: 0,
                 verified: false,
               });
-              if (IS_TTY) progressBar.increment();
-              else console.error(`  ${item.name}: skipped (exists)`);
-              completed++;
+              if (!IS_TTY) console.log(`  ⊘ ${item.name}: skipped (exists)`);
               return;
             }
+
+            const fileSize = Number(item.size);
+            const fileBar = IS_TTY
+              ? new cliProgress.SingleBar(
+                  {
+                    format: `  {bar} {percentage}% | ${item.name}`,
+                    hideCursor: true,
+                  },
+                  cliProgress.Presets.shades_classic
+                )
+              : null;
 
             let attempt = 0;
             let success = false;
             let bytesTransferred = 0;
             let isVerified = false;
+
+            fileBar?.start(fileSize, 0);
 
             while (attempt <= retries && !success && !isAborting) {
               try {
@@ -238,6 +248,9 @@ export const downloadCommand = new Command("download")
                       overwrite: opts.overwrite,
                       resume: opts.resume,
                       checksum: opts.checksum,
+                      onProgress: (bytes) => {
+                        fileBar?.update(bytes);
+                      },
                     });
 
                 bytesTransferred = result.bytesTransferred ?? item.size;
@@ -256,7 +269,7 @@ export const downloadCommand = new Command("download")
                     verified: false,
                     error: (err as Error).message,
                   });
-                  if (!IS_TTY) console.error(`  ✗ ${item.name}: failed`);
+                  if (!IS_TTY) console.log(`  ✗ ${item.name}: failed`);
                 } else {
                   const delay = 1000 * 2 ** (attempt - 1) * (1 + Math.random() * 0.2);
                   await Bun.sleep(Math.floor(delay));
@@ -264,9 +277,13 @@ export const downloadCommand = new Command("download")
               }
             }
 
+            fileBar?.stop();
+
             if (success) {
               downloaded++;
               if (isVerified) verified++;
+              totalBytesDownloaded += bytesTransferred;
+              overallBar?.update(totalBytesDownloaded);
               results.push({
                 name: item.name,
                 status: "success",
@@ -276,14 +293,11 @@ export const downloadCommand = new Command("download")
                 verified: isVerified,
               });
             }
-
-            completed++;
-            if (IS_TTY) progressBar.update(completed, { filename: item.name });
           },
           () => isAborting
         );
 
-        if (IS_TTY) progressBar.stop();
+        overallBar?.stop();
       }
 
       const durationMs = Date.now() - startTime;
@@ -302,10 +316,8 @@ export const downloadCommand = new Command("download")
 
       const reportStatus = isAborting
         ? "aborted"
-        : failed > 0
-          ? downloaded > 0
-            ? "partial"
-            : "failed"
+        : failed > 0 && downloaded > 0
+          ? "partial"
           : "success";
       await writeReport(
         {
@@ -323,13 +335,13 @@ export const downloadCommand = new Command("download")
             id: matched[i].id,
             name: matched[i].name,
             mimeType: matched[i].mimeType,
-            size: matched[i].size,
+            size: Number(matched[i].size),
             outputPath: join(
               opts.output,
               sanitizeOutputPath(matched[i].path),
               sanitizePathSegment(matched[i].name)
             ),
-            matchedBy: matched[i].matchedBy,
+            matchedBy: matched[i].matchedBy ?? "exact",
             status: r.status,
             bytesTransferred: r.bytesTransferred,
             resumed: r.resumed,

@@ -60,7 +60,9 @@ export function matchFiles(
     );
 
     if (exact.length > 0) {
-      matched.push(...exact);
+      for (const f of exact) {
+        matched.push({ ...f, matchedBy: "exact" });
+      }
       continue;
     }
 

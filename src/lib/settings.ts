@@ -29,7 +29,7 @@ const DEFAULTS: Settings = {
     clientId: "",
     clientSecret: "",
     scopes: ["https://www.googleapis.com/auth/drive.readonly"],
-    redirectUri: "http://localhost",
+    redirectUri: "http://localhost:8000",
   },
   download: {
     concurrency: 3,

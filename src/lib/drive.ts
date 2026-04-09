@@ -9,6 +9,7 @@ export interface DriveFile {
   modifiedTime?: string | null;
   parents?: string[] | null;
   path: string;
+  matchedBy?: "exact" | "fuzzy";
 }
 
 export interface ListOptions {
@@ -19,6 +20,7 @@ export interface DownloadOptions {
   overwrite?: boolean;
   resume?: boolean;
   checksum?: boolean;
+  onProgress?: (downloadedBytes: number, totalBytes: number) => void;
 }
 
 export interface DownloadResult {
@@ -195,6 +197,7 @@ export async function downloadFile(
   );
 
   let downloadedBytes = startByte;
+  const totalBytes = Number(file.size) || 0;
 
   const writeMode = startByte > 0 ? "a" : "w";
   await mkdir(dirname(outputPath), { recursive: true });
@@ -203,6 +206,9 @@ export async function downloadFile(
   const tracker = new Transform({
     transform(chunk, encoding, callback) {
       downloadedBytes += chunk.length;
+      if (options.onProgress && totalBytes > 0) {
+        options.onProgress(downloadedBytes, totalBytes);
+      }
       this.push(chunk);
       callback();
     },
