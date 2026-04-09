@@ -195,109 +195,113 @@ export const downloadCommand = new Command("download")
 
         let totalBytesDownloaded = 0;
 
-        await runWithConcurrency(
-          matched as DownloadItem[],
-          concurrency,
-          async (item: DownloadItem) => {
-            if (isAborting) return;
-            const outputPath = join(
-              opts.output,
-              sanitizeOutputPath(item.path),
-              sanitizePathSegment(item.name)
-            );
-            const exists = existsSync(outputPath);
+        try {
+          await runWithConcurrency(
+            matched as DownloadItem[],
+            concurrency,
+            async (item: DownloadItem) => {
+              if (isAborting) return;
+              const outputPath = join(
+                opts.output,
+                sanitizeOutputPath(item.path),
+                sanitizePathSegment(item.name)
+              );
+              const exists = existsSync(outputPath);
 
-            if (exists && !opts.overwrite) {
-              skipped++;
-              results.push({
-                name: item.name,
-                status: "skipped",
-                bytesTransferred: 0,
-                resumed: false,
-                retryCount: 0,
-                verified: false,
-              });
-              if (!IS_TTY) console.log(`  ⊘ ${item.name}: skipped (exists)`);
-              return;
-            }
-
-            const fileSize = Number(item.size);
-            const fileBar = IS_TTY
-              ? new cliProgress.SingleBar(
-                  {
-                    format: `  {bar} {percentage}% | ${item.name}`,
-                    hideCursor: true,
-                  },
-                  cliProgress.Presets.shades_classic
-                )
-              : null;
-
-            let attempt = 0;
-            let success = false;
-            let bytesTransferred = 0;
-            let isVerified = false;
-
-            fileBar?.start(fileSize, 0);
-
-            while (attempt <= retries && !success && !isAborting) {
-              try {
-                const isExport = item.mimeType.startsWith("application/vnd.google-apps");
-                const result = isExport
-                  ? await exportWorkspaceFile(auth, item, outputPath)
-                  : await downloadFile(auth, item, outputPath, {
-                      overwrite: opts.overwrite,
-                      resume: opts.resume,
-                      checksum: opts.checksum,
-                      onProgress: (bytes) => {
-                        fileBar?.update(bytes);
-                      },
-                    });
-
-                bytesTransferred = result.bytesTransferred ?? item.size;
-                isVerified = result.verified ?? false;
-                success = true;
-              } catch (err) {
-                attempt++;
-                if (attempt > retries) {
-                  failed++;
-                  results.push({
-                    name: item.name,
-                    status: "failed",
-                    bytesTransferred: 0,
-                    resumed: false,
-                    retryCount: attempt,
-                    verified: false,
-                    error: (err as Error).message,
-                  });
-                  if (!IS_TTY) console.log(`  ✗ ${item.name}: failed`);
-                } else {
-                  const delay = 1000 * 2 ** (attempt - 1) * (1 + Math.random() * 0.2);
-                  await Bun.sleep(Math.floor(delay));
-                }
+              if (exists && !opts.overwrite) {
+                skipped++;
+                results.push({
+                  name: item.name,
+                  status: "skipped",
+                  bytesTransferred: 0,
+                  resumed: false,
+                  retryCount: 0,
+                  verified: false,
+                });
+                if (!IS_TTY) console.log(`  ⊘ ${item.name}: skipped (exists)`);
+                return;
               }
-            }
 
-            fileBar?.stop();
+              const fileSize = Number(item.size);
+              const fileBar = IS_TTY
+                ? new cliProgress.SingleBar(
+                    {
+                      format: `  {bar} {percentage}% | ${item.name}`,
+                      hideCursor: true,
+                    },
+                    cliProgress.Presets.shades_classic
+                  )
+                : null;
 
-            if (success) {
-              downloaded++;
-              if (isVerified) verified++;
-              totalBytesDownloaded += bytesTransferred;
-              overallBar?.update(totalBytesDownloaded);
-              results.push({
-                name: item.name,
-                status: "success",
-                bytesTransferred,
-                resumed: opts.resume && exists,
-                retryCount: attempt,
-                verified: isVerified,
-              });
-            }
-          },
-          () => isAborting
-        );
+              let attempt = 0;
+              let success = false;
+              let bytesTransferred = 0;
+              let isVerified = false;
 
-        overallBar?.stop();
+              fileBar?.start(fileSize, 0);
+
+              try {
+                while (attempt <= retries && !success && !isAborting) {
+                  try {
+                    const isExport = item.mimeType.startsWith("application/vnd.google-apps");
+                    const result = isExport
+                      ? await exportWorkspaceFile(auth, item, outputPath)
+                      : await downloadFile(auth, item, outputPath, {
+                          overwrite: opts.overwrite,
+                          resume: opts.resume,
+                          checksum: opts.checksum,
+                          onProgress: (bytes) => {
+                            fileBar?.update(bytes);
+                          },
+                        });
+
+                    bytesTransferred = result.bytesTransferred ?? item.size;
+                    isVerified = result.verified ?? false;
+                    success = true;
+                  } catch (err) {
+                    attempt++;
+                    if (attempt > retries) {
+                      failed++;
+                      results.push({
+                        name: item.name,
+                        status: "failed",
+                        bytesTransferred: 0,
+                        resumed: false,
+                        retryCount: attempt,
+                        verified: false,
+                        error: (err as Error).message,
+                      });
+                      if (!IS_TTY) console.log(`  ✗ ${item.name}: failed`);
+                    } else {
+                      const delay = 1000 * 2 ** (attempt - 1) * (1 + Math.random() * 0.2);
+                      await Bun.sleep(Math.floor(delay));
+                    }
+                  }
+                }
+              } finally {
+                fileBar?.stop();
+              }
+
+              if (success) {
+                downloaded++;
+                if (isVerified) verified++;
+                totalBytesDownloaded += bytesTransferred;
+                overallBar?.update(totalBytesDownloaded);
+                results.push({
+                  name: item.name,
+                  status: "success",
+                  bytesTransferred,
+                  resumed: opts.resume && exists,
+                  retryCount: attempt,
+                  verified: isVerified,
+                });
+              }
+            },
+            () => isAborting
+          );
+        } finally {
+          overallBar?.stop();
+        }
       }
 
       const durationMs = Date.now() - startTime;
