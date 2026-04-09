@@ -29,11 +29,7 @@ export interface DownloadResult {
 }
 
 export function extractFolderId(input: string): string {
-  const patterns = [
-    /\/folders\/([a-zA-Z0-9_-]+)/,
-    /id=([a-zA-Z0-9_-]+)/,
-    /^([a-zA-Z0-9_-]{10,})$/,
-  ];
+  const patterns = [/\/folders\/([a-zA-Z0-9_-]+)/, /id=([a-zA-Z0-9_-]+)/, /^([a-zA-Z0-9_-]{10,})$/];
 
   for (const pattern of patterns) {
     const match = input.match(pattern);
@@ -50,7 +46,7 @@ export function isGoogleWorkspaceFile(mimeType: string): boolean {
 async function withRetry<T>(
   fn: () => Promise<T>,
   maxRetries = 3,
-  maxTimeoutMs = 300_000,
+  maxTimeoutMs = 300_000
 ): Promise<T> {
   if (maxRetries < 0) {
     throw new Error("maxRetries must be >= 0");
@@ -64,8 +60,7 @@ async function withRetry<T>(
       attempt++;
       const elapsed = Date.now() - startTime;
       const shouldRetry = attempt <= maxRetries && elapsed < maxTimeoutMs;
-      const isRetryableError =
-        err.code === 403 || err.code === 429 || err.code >= 500;
+      const isRetryableError = err.code === 403 || err.code === 429 || err.code >= 500;
       if (shouldRetry && isRetryableError) {
         const delay = 2 ** attempt * 1000 + Math.random() * 1000;
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -79,7 +74,7 @@ async function withRetry<T>(
 export async function listFolderFiles(
   auth: OAuth2Client,
   folderId: string,
-  options: ListOptions = {},
+  options: ListOptions = {}
 ): Promise<DriveFile[]> {
   const { google } = await import("googleapis");
   const drive = google.drive({ version: "v3", auth });
@@ -101,27 +96,22 @@ export async function listFolderFiles(
             pageSize: 1000,
             pageToken,
           },
-          { timeout: 30000 },
-        ),
+          { timeout: 30000 }
+        )
       );
 
       for (const file of response.data.files ?? []) {
         if (file.mimeType === "application/vnd.google-apps.shortcut") {
           // Resolve shortcut if it points to a folder or file
           if (file.shortcutDetails?.targetId) {
-            if (
-              file.shortcutDetails.targetMimeType ===
-              "application/vnd.google-apps.folder"
-            ) {
+            if (file.shortcutDetails.targetMimeType === "application/vnd.google-apps.folder") {
               if (options.recursive) queue.push(file.shortcutDetails.targetId);
             } else {
               files.push({
                 id: file.shortcutDetails.targetId,
                 name: file.name ?? "unknown",
                 size: "0", // Unknown size for shortcuts until resolved
-                mimeType:
-                  file.shortcutDetails.targetMimeType ??
-                  "application/octet-stream",
+                mimeType: file.shortcutDetails.targetMimeType ?? "application/octet-stream",
                 md5Hash: null,
                 modifiedTime: file.modifiedTime,
                 parents: file.parents,
@@ -161,16 +151,12 @@ export async function downloadFile(
   auth: OAuth2Client,
   file: DriveFile,
   outputPath: string,
-  options: DownloadOptions = {},
+  options: DownloadOptions = {}
 ): Promise<DownloadResult> {
   const { google } = await import("googleapis");
   const drive = google.drive({ version: "v3", auth });
   const { createWriteStream, existsSync } = await import("node:fs");
-  const {
-    stat: statProm,
-    writeFile: writeFileProm,
-    mkdir,
-  } = await import("node:fs/promises");
+  const { stat: statProm, writeFile: writeFileProm, mkdir } = await import("node:fs/promises");
   const { dirname } = await import("node:path");
   const { pipeline } = await import("node:stream/promises");
   const { Transform } = await import("node:stream");
@@ -205,10 +191,7 @@ export async function downloadFile(
   }
 
   const response = await withRetry(() =>
-    drive.files.get(
-      { fileId: file.id, alt: "media" },
-      { headers, responseType: "stream" },
-    ),
+    drive.files.get({ fileId: file.id, alt: "media" }, { headers, responseType: "stream" })
   );
 
   let downloadedBytes = startByte;
@@ -242,7 +225,7 @@ export async function downloadFile(
 export async function exportWorkspaceFile(
   auth: OAuth2Client,
   file: DriveFile,
-  outputPath: string,
+  outputPath: string
 ): Promise<DownloadResult> {
   const { google } = await import("googleapis");
   const drive = google.drive({ version: "v3", auth });
@@ -268,10 +251,7 @@ export async function exportWorkspaceFile(
   }
 
   const response = await withRetry(() =>
-    drive.files.export(
-      { fileId: file.id, mimeType: exportMime },
-      { responseType: "stream" },
-    ),
+    drive.files.export({ fileId: file.id, mimeType: exportMime }, { responseType: "stream" })
   );
 
   await mkdir(dirname(outputPath), { recursive: true });
@@ -286,10 +266,7 @@ export async function exportWorkspaceFile(
   };
 }
 
-export async function verifyMd5(
-  filePath: string,
-  expectedMd5: string,
-): Promise<boolean> {
+export async function verifyMd5(filePath: string, expectedMd5: string): Promise<boolean> {
   const { createHash } = await import("node:crypto");
   const { createReadStream } = await import("node:fs");
   const { pipeline } = await import("node:stream/promises");
