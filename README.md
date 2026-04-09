@@ -54,7 +54,7 @@ $ gdrive-dl download -u "https://drive.google.com/drive/folders/abc123" -f names
 ### From source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/gdrive-dl.git
+git clone https://github.com/crazyads69/gdrive-dl.git
 cd gdrive-dl
 bun install
 ```

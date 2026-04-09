@@ -1,0 +1,35 @@
+{
+  "name": "gdrive-dl",
+  "version": "1.2.0",
+  "description": "Batch download files from Google Drive by filename",
+  "type": "module",
+  "bin": {
+    "gdrive-dl": "./src/cli.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/cli.ts",
+    "build": "bun build src/cli.ts --compile --outfile dist/gdrive-dl",
+    "build:linux": "bun build src/cli.ts --compile --target=bun-linux-x64 --outfile dist/gdrive-dl-linux",
+    "build:mac": "bun build src/cli.ts --compile --target=bun-darwin-arm64 --outfile dist/gdrive-dl-mac",
+    "build:win": "bun build src/cli.ts --compile --target=bun-windows-x64 --outfile dist/gdrive-dl.exe",
+    "test": "bun test",
+    "lint": "bunx biome check .",
+    "lint:fix": "bunx biome check --fix ."
+  },
+  "dependencies": {
+    "@inquirer/confirm": "^6.0.11",
+    "@inquirer/prompts": "^8.4.1",
+    "chalk": "^5.4.0",
+    "cli-progress": "^3.12.0",
+    "commander": "^12.1.0",
+    "conf": "^13.0.0",
+    "google-auth-library": "^9.14.0",
+    "googleapis": "^144.0.0",
+    "ora": "^8.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.0",
+    "@types/bun": "latest",
+    "@types/cli-progress": "^3.11.6"
+  }
+}

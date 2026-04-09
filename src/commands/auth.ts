@@ -13,12 +13,12 @@ async function runSetup(): Promise<void> {
   await mkdir(configDir, { recursive: true });
 
   let currentClientId = "";
-  let currentClientSecret = "";
+  let hasExistingSecret = false;
 
   try {
     const existing = loadSettings({ configDir });
     currentClientId = existing.oauth.clientId;
-    currentClientSecret = existing.oauth.clientSecret;
+    hasExistingSecret = existing.oauth.clientSecret.length > 0;
   } catch {
     // no config yet, use defaults
   }
@@ -31,17 +31,20 @@ async function runSetup(): Promise<void> {
     validate: (v) => v.trim().length > 0 || "Client ID is required",
   });
 
+  const secretPrompt = hasExistingSecret
+    ? "OAuth Client Secret: (leave empty to keep current)"
+    : "OAuth Client Secret:";
   const clientSecret = await password({
-    message: "OAuth Client Secret:",
-    default: currentClientSecret,
+    message: secretPrompt,
     mask: true,
     validate: (v) => v.trim().length > 0 || "Client Secret is required",
   });
 
+  const secretToSave = clientSecret.trim();
   const config = {
     oauth: {
       clientId: clientId.trim(),
-      clientSecret: clientSecret.trim(),
+      clientSecret: secretToSave || undefined,
       scopes: ["https://www.googleapis.com/auth/drive.readonly"],
       redirectUri: "http://localhost",
     },
@@ -51,6 +54,11 @@ async function runSetup(): Promise<void> {
     },
   };
 
+  if (!secretToSave && hasExistingSecret) {
+    const existing = loadSettings({ configDir });
+    config.oauth.clientSecret = existing.oauth.clientSecret;
+  }
+
   await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
   logSuccess(`Configuration saved to ${configPath}\n`);
 }
@@ -58,7 +66,11 @@ async function runSetup(): Promise<void> {
 export const authCommand = new Command("auth")
   .description("Authenticate with Google Drive via browser")
   .option("-f, --force", "Re-authenticate even if a valid token exists", false)
-  .option("-s, --setup", "Interactive first-time setup (configure OAuth credentials)", false)
+  .option(
+    "-s, --setup",
+    "Interactive first-time setup (configure OAuth credentials)",
+    false,
+  )
   .action(async (opts) => {
     try {
       if (opts.setup) {
