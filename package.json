@@ -1,6 +1,6 @@
 {
   "name": "gdrive-dl",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Batch download files from Google Drive by filename",
   "type": "module",
   "bin": {
