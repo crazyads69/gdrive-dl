@@ -1,0 +1,82 @@
+name: Automated Release
+
+on:
+  push:
+    branches:
+      - release
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed for pushing tags and creating GitHub releases
+      
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Required to fetch all history and previous tags
+
+      - name: Setup Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint codebase
+        run: bun run lint
+
+      - name: Run tests
+        run: bun test
+
+      - name: Bump version and tag
+        id: version
+        run: |
+          # Automatically bump the patch version in package.json (e.g., 1.2.0 -> 1.2.1)
+          # This creates a local git commit and a local git tag.
+          npm version patch -m "chore(release): %s [skip ci]"
+          
+          # Extract the new version tag
+          NEW_TAG=$(git describe --tags --abbrev=0)
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          
+          # Push the version bump commit and the new tag back to the release branch
+          git push origin release --follow-tags
+
+      - name: Build macOS binary (ARM64)
+        run: bun run build:mac
+
+      - name: Build macOS binary (x64)
+        run: bun build src/cli.ts --compile --target=bun-darwin-x64 --outfile dist/gdrive-dl-mac-x64
+
+      - name: Build Linux binary (x64)
+        run: bun run build:linux
+
+      - name: Build Windows binary (x64)
+        run: bun run build:win
+
+      - name: Rename and compress binaries
+        run: |
+          cd dist
+          tar -czvf gdrive-dl-mac-arm64.tar.gz gdrive-dl-mac
+          tar -czvf gdrive-dl-mac-x64.tar.gz gdrive-dl-mac-x64
+          tar -czvf gdrive-dl-linux-x64.tar.gz gdrive-dl-linux
+          zip gdrive-dl-windows-x64.zip gdrive-dl.exe
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.new_tag }}
+          files: |
+            dist/gdrive-dl-mac-arm64.tar.gz
+            dist/gdrive-dl-mac-x64.tar.gz
+            dist/gdrive-dl-linux-x64.tar.gz
+            dist/gdrive-dl-windows-x64.zip
+          generate_release_notes: true

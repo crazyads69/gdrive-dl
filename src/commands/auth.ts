@@ -66,11 +66,7 @@ async function runSetup(): Promise<void> {
 export const authCommand = new Command("auth")
   .description("Authenticate with Google Drive via browser")
   .option("-f, --force", "Re-authenticate even if a valid token exists", false)
-  .option(
-    "-s, --setup",
-    "Interactive first-time setup (configure OAuth credentials)",
-    false,
-  )
+  .option("-s, --setup", "Interactive first-time setup (configure OAuth credentials)", false)
   .action(async (opts) => {
     try {
       if (opts.setup) {
@@ -90,6 +86,6 @@ export const authCommand = new Command("auth")
       }
     } catch (err) {
       logError(`Authentication failed: ${(err as Error).message}`);
-      process.exit(1);
+      process.exitCode = 1;
     }
   });

@@ -8,9 +8,7 @@ export function sanitizePathSegment(segment: string): string {
 
 export function sanitizeOutputPath(relativePath: string): string {
   if (!relativePath) return "";
-  const segments = relativePath
-    .split(/[/\\]/)
-    .filter((s) => s.length > 0 && s !== ".");
+  const segments = relativePath.split(/[/\\]/).filter((s) => s.length > 0 && s !== ".");
   const result: string[] = [];
   for (const seg of segments) {
     if (seg === "..") {

@@ -1,15 +1,9 @@
-import { describe, test, expect } from "bun:test";
-import {
-  matchFiles,
-  removeExtension,
-  normalizeToNfc,
-} from "../src/lib/matcher";
+import { describe, expect, test } from "bun:test";
+import { matchFiles, normalizeToNfc, removeExtension } from "../src/lib/matcher";
 
 describe("removeExtension", () => {
-  test("removes single extension", () =>
-    expect(removeExtension("photo.jpg")).toBe("photo"));
-  test("handles no extension", () =>
-    expect(removeExtension("photo")).toBe("photo"));
+  test("removes single extension", () => expect(removeExtension("photo.jpg")).toBe("photo"));
+  test("handles no extension", () => expect(removeExtension("photo")).toBe("photo"));
   test("handles multiple dots", () =>
     expect(removeExtension("my.photo.final.jpg")).toBe("my.photo.final"));
 });

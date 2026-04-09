@@ -4,8 +4,8 @@ import type { OAuth2Client } from "google-auth-library";
 import { google } from "googleapis";
 import { OAUTH_DEFAULTS } from "../constants.ts";
 import { getConfigDir, getTokenPath } from "./config.ts";
-import { loadSettings } from "./settings.ts";
 import { logError, logInfo, logSuccess } from "./logger.ts";
+import { loadSettings } from "./settings.ts";
 
 const HTML_AUTH_SUCCESS = `<!DOCTYPE html>
 <html>
@@ -63,11 +63,7 @@ async function saveToken(token: SavedToken): Promise<void> {
 
 function createOAuth2Client(): OAuth2Client {
   const { oauth } = loadSettings({ configDir: getConfigDir() });
-  return new google.auth.OAuth2(
-    oauth.clientId,
-    oauth.clientSecret,
-    oauth.redirectUri,
-  );
+  return new google.auth.OAuth2(oauth.clientId, oauth.clientSecret, oauth.redirectUri);
 }
 
 async function openBrowserAndWaitForCode(authUrl: string): Promise<string> {
@@ -103,19 +99,13 @@ async function openBrowserAndWaitForCode(authUrl: string): Promise<string> {
     const finalUrl = authUrl.replace(/^http:\/\/localhost/, redirectUri);
 
     const cmd =
-      process.platform === "darwin"
-        ? "open"
-        : process.platform === "win32"
-          ? "start"
-          : "xdg-open";
+      process.platform === "darwin" ? "open" : process.platform === "win32" ? "start" : "xdg-open";
     const proc = Bun.spawn([cmd, finalUrl]);
     void proc;
   });
 }
 
-async function startInteractiveAuth(
-  client: OAuth2Client,
-): Promise<OAuth2Client> {
+async function startInteractiveAuth(client: OAuth2Client): Promise<OAuth2Client> {
   const authUrl = client.generateAuthUrl({
     access_type: "offline",
     scope: [...OAUTH_DEFAULTS.scopes],
@@ -131,9 +121,7 @@ async function startInteractiveAuth(
     refresh_token: tokens.refresh_token ?? undefined,
     token_type: tokens.token_type ?? "Bearer",
     expiry_date: tokens.expiry_date ?? Date.now(),
-    email: tokens.id_token
-      ? (parseIdToken(tokens.id_token).email ?? undefined)
-      : undefined,
+    email: tokens.id_token ? (parseIdToken(tokens.id_token).email ?? undefined) : undefined,
   };
 
   await saveToken(saved);
@@ -150,9 +138,7 @@ function parseIdToken(idToken: string): IdTokenPayload {
   try {
     const parts = idToken.split(".");
     if (parts.length !== 3) return {};
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf-8"),
-    );
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf-8"));
     return payload as IdTokenPayload;
   } catch {
     return {};

@@ -1,5 +1,5 @@
-import { describe, test, expect } from "bun:test";
-import { sanitizePathSegment, sanitizeOutputPath } from "../src/lib/sanitizer";
+import { describe, expect, test } from "bun:test";
+import { sanitizeOutputPath, sanitizePathSegment } from "../src/lib/sanitizer";
 
 describe("sanitizePathSegment", () => {
   test("strips parent-directory traversal", () => {
@@ -33,17 +33,14 @@ describe("sanitizeOutputPath", () => {
   test("normalizes mixed separators and sanitizes", () => {
     expect(sanitizeOutputPath("foo\\bar//baz/..qux")).toBe("foo/bar/baz/qux");
   });
-
   test("handles empty segments", () => {
     expect(sanitizeOutputPath("foo//bar")).toBe("foo/bar");
     expect(sanitizeOutputPath("foo/./bar")).toBe("foo/bar");
   });
-
   test("returns empty string for empty path", () => {
     expect(sanitizeOutputPath("")).toBe("");
     expect(sanitizeOutputPath("  ")).toBe("");
   });
-
   test("strips traversal attempts", () => {
     expect(sanitizeOutputPath("../../../etc/passwd")).toBe("etc/passwd");
   });

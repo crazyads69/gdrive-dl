@@ -16,7 +16,7 @@ export const listCommand = new Command("list")
       const auth = await getAuthClient();
       const folderId = extractFolderId(opts.url);
 
-      logInfo(`Listing files in folder...`);
+      logInfo("Listing files in folder...");
       const files = await listFolderFiles(auth, folderId, { recursive: false });
 
       if (opts.json) {
@@ -34,11 +34,8 @@ export const listCommand = new Command("list")
       } else {
         console.log(`\nFound ${files.length} file(s):\n`);
         for (const file of files.slice(0, 50)) {
-          const size =
-            file.size > 0 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "—";
-          console.log(
-            `  ${file.name.padEnd(40)} ${size.padEnd(10)} ${file.mimeType}`,
-          );
+          const size = file.size > 0 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : "—";
+          console.log(`  ${file.name.padEnd(40)} ${size.padEnd(10)} ${file.mimeType}`);
         }
         if (files.length > 50) {
           console.log(`  ... and ${files.length - 50} more`);
@@ -46,6 +43,6 @@ export const listCommand = new Command("list")
       }
     } catch (err) {
       logWarn(`Failed to list files: ${(err as Error).message}`);
-      process.exit(1);
+      process.exitCode = 1;
     }
   });

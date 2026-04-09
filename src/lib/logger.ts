@@ -16,7 +16,7 @@ function formatSize(bytes: number): string {
   if (bytes === 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+  return `${(bytes / 1024 ** i).toFixed(1)} ${units[i]}`;
 }
 
 function formatDuration(ms: number): string {
@@ -26,7 +26,7 @@ function formatDuration(ms: number): string {
 }
 
 export function log(level: LogLevel, message: string): void {
-  console.log(`${PREFIX[level]} ${message}`);
+  console.error(`${PREFIX[level]} ${message}`);
 }
 
 export function logInfo(message: string): void {
@@ -56,14 +56,14 @@ export function logDownloadProgress(
   const empty = barWidth - filled;
   const bar = chalk.green("█".repeat(filled)) + chalk.gray("░".repeat(empty));
   const speedStr = speed > 0 ? `${formatSize(speed)}/s` : "";
-  console.log(
+  console.error(
     `  ${bar} ${percent.toFixed(0).padStart(3)}% | ${name} (${formatSize(size)}) ${speedStr}`
   );
 }
 
 export function logDownloadComplete(name: string, size: number, verified: boolean): void {
   const verifiedStr = verified ? chalk.green(" ✓ verified") : "";
-  console.log(`  ${chalk.green("✓")} ${name} (${formatSize(size)})${verifiedStr}`);
+  console.error(`  ${chalk.green("✓")} ${name} (${formatSize(size)})${verifiedStr}`);
 }
 
 export function logSummary(stats: {
@@ -75,43 +75,43 @@ export function logSummary(stats: {
   outputDir: string;
   durationMs: number;
 }): void {
-  console.log(chalk.bold("\n── Summary ──"));
+  console.error(chalk.bold("\n── Summary ──"));
   if (stats.downloaded > 0) {
-    console.log(`  ${chalk.green("✓")} Downloaded: ${stats.downloaded}`);
+    console.error(`  ${chalk.green("✓")} Downloaded: ${stats.downloaded}`);
   }
   if (stats.verified > 0) {
-    console.log(`  ${chalk.green("✓")} Verified:   ${stats.verified}`);
+    console.error(`  ${chalk.green("✓")} Verified:   ${stats.verified}`);
   }
   if (stats.skipped > 0) {
-    console.log(`  ${chalk.yellow("⚠")} Skipped:   ${stats.skipped}`);
+    console.error(`  ${chalk.yellow("⚠")} Skipped:   ${stats.skipped}`);
   }
   if (stats.failed > 0) {
-    console.log(`  ${chalk.red("✗")} Failed:    ${stats.failed}`);
+    console.error(`  ${chalk.red("✗")} Failed:    ${stats.failed}`);
   }
   if (stats.notFound > 0) {
-    console.log(`  ${chalk.yellow("⚠")} Not found: ${stats.notFound}`);
+    console.error(`  ${chalk.yellow("⚠")} Not found: ${stats.notFound}`);
   }
-  console.log(`  ${chalk.gray("📂")} Output:    ${stats.outputDir}`);
-  console.log(`  ${chalk.gray("⏱")} Duration:  ${formatDuration(stats.durationMs)}`);
+  console.error(`  ${chalk.gray("📂")} Output:    ${stats.outputDir}`);
+  console.error(`  ${chalk.gray("⏱")} Duration:  ${formatDuration(stats.durationMs)}`);
 }
 
 export function logSpinner(message: string): {
   stop: (finalMsg?: string) => void;
 } {
   if (!IS_TTY) {
-    console.log(message);
+    console.error(message);
     return { stop: () => {} };
   }
   const spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
   let i = 0;
   const interval = setInterval(() => {
-    process.stdout.write(`\r${spinner[i++ % spinner.length]} ${message}`);
+    process.stderr.write(`\r${spinner[i++ % spinner.length]} ${message}`);
   }, 80);
   return {
     stop: (finalMsg?: string) => {
       clearInterval(interval);
-      process.stdout.write("\r");
-      if (finalMsg) console.log(finalMsg);
+      process.stderr.write("\r\x1b[K"); // clear line
+      if (finalMsg) console.error(finalMsg);
     },
   };
 }

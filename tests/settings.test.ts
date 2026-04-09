@@ -24,16 +24,16 @@ describe("settings", () => {
   });
 
   test("loads defaults when no config file exists", async () => {
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_ID;
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_SECRET;
+    process.env.GDRIVEDL_OAUTH_CLIENT_ID = undefined;
+    process.env.GDRIVEDL_OAUTH_CLIENT_SECRET = undefined;
 
     const { loadSettings } = await import("../src/lib/settings");
     expect(() => loadSettings({ configDir: TEMP_CONFIG })).toThrow("Missing OAuth credentials");
   });
 
   test("config file values override defaults", async () => {
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_ID;
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_SECRET;
+    process.env.GDRIVEDL_OAUTH_CLIENT_ID = undefined;
+    process.env.GDRIVEDL_OAUTH_CLIENT_SECRET = undefined;
     await Bun.write(
       `${TEMP_CONFIG}/config.json`,
       JSON.stringify({
@@ -62,13 +62,13 @@ describe("settings", () => {
     expect(settings.oauth.clientId).toBe("env-id");
     expect(settings.oauth.clientSecret).toBe("env-secret");
 
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_ID;
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_SECRET;
+    process.env.GDRIVEDL_OAUTH_CLIENT_ID = undefined;
+    process.env.GDRIVEDL_OAUTH_CLIENT_SECRET = undefined;
   });
 
   test("throws error when oauth credentials are missing", async () => {
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_ID;
-    delete process.env.GDRIVEDL_OAUTH_CLIENT_SECRET;
+    process.env.GDRIVEDL_OAUTH_CLIENT_ID = undefined;
+    process.env.GDRIVEDL_OAUTH_CLIENT_SECRET = undefined;
     await Bun.write(`${TEMP_CONFIG}/config.json`, JSON.stringify({ oauth: {} }));
 
     const { loadSettings } = await import("../src/lib/settings");

@@ -1,14 +1,15 @@
-import { Command } from "commander";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import cliProgress from "cli-progress";
+import { Command } from "commander";
 import { getAuthClient, getAuthenticatedEmail } from "../lib/auth.ts";
+import { getConfigDir } from "../lib/config.ts";
 import {
-  extractFolderId,
-  listFolderFiles,
   downloadFile,
   exportWorkspaceFile,
+  extractFolderId,
+  listFolderFiles,
 } from "../lib/drive.ts";
 import {
   IS_TTY,
@@ -21,8 +22,7 @@ import {
 } from "../lib/logger.ts";
 import { matchFiles, normalizeToNfc } from "../lib/matcher.ts";
 import { writeReport } from "../lib/reporter.ts";
-import { sanitizeOutputPath } from "../lib/sanitizer.ts";
-import { getConfigDir } from "../lib/config.ts";
+import { sanitizeOutputPath, sanitizePathSegment } from "../lib/sanitizer.ts";
 import { loadSettings } from "../lib/settings.ts";
 
 interface DownloadItem {
@@ -59,40 +59,28 @@ export const downloadCommand = new Command("download")
   .option("--overwrite", "Overwrite existing files instead of skipping", false)
   .option("--resume", "Resume interrupted downloads (byte-range)", false)
   .option("--checksum", "Verify downloaded files with MD5", false)
-  .option(
-    "--dry-run",
-    "Show what would be downloaded without downloading",
-    false,
-  )
-  .option(
-    "--report",
-    "Write JSON report to file (default: true for download)",
-    true,
-  )
+  .option("--dry-run", "Show what would be downloaded without downloading", false)
+  .option("--report", "Write JSON report to file (default: true for download)", true)
   .option("--report-path <file>", "Override default report path")
   .action(async (opts) => {
     const startTime = Date.now();
     const settings = loadSettings({ configDir: getConfigDir() });
-    const cliConcurrency = opts.concurrency
-      ? Number.parseInt(opts.concurrency)
-      : NaN;
-    const cliRetries = opts.retries ? Number.parseInt(opts.retries) : NaN;
+    const cliConcurrency = opts.concurrency ? Number.parseInt(opts.concurrency, 10) : Number.NaN;
+    const cliRetries = opts.retries ? Number.parseInt(opts.retries, 10) : Number.NaN;
     const concurrency = Math.min(
       8,
-      Math.max(
-        1,
-        isNaN(cliConcurrency) ? settings.download.concurrency : cliConcurrency,
-      ),
+      Math.max(1, Number.isNaN(cliConcurrency) ? settings.download.concurrency : cliConcurrency)
     );
-    const retries = isNaN(cliRetries)
+    const retries = Number.isNaN(cliRetries)
       ? settings.download.retries
-      : Math.max(0, cliRetries);
+      : Math.max(0, Math.min(10, cliRetries));
 
     let names: string[] = [];
     if (opts.file) {
       if (!existsSync(opts.file)) {
         logError(`File not found: ${opts.file}`);
-        process.exit(1);
+        process.exitCode = 1;
+        return;
       }
       const content = await readFile(opts.file, "utf-8");
       names = content
@@ -107,8 +95,16 @@ export const downloadCommand = new Command("download")
 
     if (names.length === 0) {
       logError("No filenames provided. Use --file or --names.");
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
+
+    let isAborting = false;
+    const handleSignal = () => {
+      isAborting = true;
+    };
+    process.on("SIGINT", handleSignal);
+    process.on("SIGTERM", handleSignal);
 
     const folderId = extractFolderId(opts.url);
     const spinner = logSpinner("Listing files in folder...");
@@ -143,32 +139,45 @@ export const downloadCommand = new Command("download")
             unmatched: names,
             fuzzySuggestions: fuzzyMatches,
           },
-          opts.reportPath,
+          opts.reportPath
         );
-        process.exit(3);
+        process.exitCode = 3;
+        return;
       }
 
-      console.log(`\n✓ ${matched.length} file(s) matched:\n`);
+      console.error(`\n✓ ${matched.length} file(s) matched:\n`);
       for (const m of matched) {
-        const outPath = sanitizeOutputPath(join(opts.output, m.path, m.name));
-        console.log(`  ${m.name} → ${outPath}`);
+        const outPath = join(opts.output, sanitizeOutputPath(m.path), sanitizePathSegment(m.name));
+        console.error(`  ${m.name} → ${outPath}`);
       }
       if (unmatched.length > 0) {
-        console.log(`\n⚠ ${unmatched.length} name(s) not found:`);
+        console.error(`\n⚠ ${unmatched.length} name(s) not found:`);
         for (const u of unmatched) {
-          const suggestion = fuzzyMatches.find((f) => f.name === u)
-            ?.candidates[0];
+          const suggestion = fuzzyMatches.find((f) => f.name === u)?.candidates[0];
           const hint = suggestion ? ` (did you mean: ${suggestion.name}?)` : "";
-          console.log(`  ${u}${hint}`);
+          console.error(`  ${u}${hint}`);
         }
       }
 
-      if (!opts.yes && !opts.dryRun) {
-        const answer = await promptConfirm(
-          `Download ${matched.length} file(s) to ${opts.output}?`,
+      // Check available disk space before proceeding
+      const { checkDiskSpace } = await import("../lib/sys.ts");
+      const totalRequiredBytes = matched.reduce((sum, m) => sum + Number(m.size || 0), 0);
+      const outputDir = resolve(opts.output);
+      await mkdir(outputDir, { recursive: true });
+
+      const hasEnoughSpace = await checkDiskSpace(outputDir, totalRequiredBytes);
+      if (!hasEnoughSpace) {
+        logError(
+          `Not enough disk space. Required: ${(totalRequiredBytes / 1024 / 1024).toFixed(1)}MB.`
         );
+        process.exitCode = 1;
+        return;
+      }
+
+      if (!opts.yes && !opts.dryRun) {
+        const answer = await promptConfirm(`Download ${matched.length} file(s) to ${opts.output}?`);
         if (!answer) {
-          console.log("Cancelled.");
+          console.error("Cancelled.");
           return;
         }
       }
@@ -182,7 +191,7 @@ export const downloadCommand = new Command("download")
       if (!opts.dryRun) {
         const progressBar = new cliProgress.SingleBar(
           { format: "{bar} {percentage}% | {filename}", hideCursor: true },
-          cliProgress.Presets.shades_classic,
+          cliProgress.Presets.shades_classic
         );
         if (IS_TTY) progressBar.start(matched.length, 0);
         let completed = 0;
@@ -191,8 +200,11 @@ export const downloadCommand = new Command("download")
           matched,
           concurrency,
           async (item: DownloadItem) => {
-            const outputPath = sanitizeOutputPath(
-              join(opts.output, item.path, item.name),
+            if (isAborting) return;
+            const outputPath = join(
+              opts.output,
+              sanitizeOutputPath(item.path),
+              sanitizePathSegment(item.name)
             );
             const exists = existsSync(outputPath);
 
@@ -207,7 +219,7 @@ export const downloadCommand = new Command("download")
                 verified: false,
               });
               if (IS_TTY) progressBar.increment();
-              else console.log(`  ${item.name}: skipped (exists)`);
+              else console.error(`  ${item.name}: skipped (exists)`);
               completed++;
               return;
             }
@@ -217,11 +229,9 @@ export const downloadCommand = new Command("download")
             let bytesTransferred = 0;
             let isVerified = false;
 
-            while (attempt <= retries && !success) {
+            while (attempt <= retries && !success && !isAborting) {
               try {
-                const isExport = item.mimeType.startsWith(
-                  "application/vnd.google-apps",
-                );
+                const isExport = item.mimeType.startsWith("application/vnd.google-apps");
                 const result = isExport
                   ? await exportWorkspaceFile(auth, item, outputPath)
                   : await downloadFile(auth, item, outputPath, {
@@ -246,10 +256,9 @@ export const downloadCommand = new Command("download")
                     verified: false,
                     error: (err as Error).message,
                   });
-                  if (!IS_TTY) console.log(`  ✗ ${item.name}: failed`);
+                  if (!IS_TTY) console.error(`  ✗ ${item.name}: failed`);
                 } else {
-                  const delay =
-                    1000 * Math.pow(2, attempt - 1) * (1 + Math.random() * 0.2);
+                  const delay = 1000 * 2 ** (attempt - 1) * (1 + Math.random() * 0.2);
                   await Bun.sleep(Math.floor(delay));
                 }
               }
@@ -271,12 +280,16 @@ export const downloadCommand = new Command("download")
             completed++;
             if (IS_TTY) progressBar.update(completed, { filename: item.name });
           },
+          () => isAborting
         );
 
         if (IS_TTY) progressBar.stop();
       }
 
       const durationMs = Date.now() - startTime;
+      if (isAborting) {
+        logWarn("\nDownload aborted by user.");
+      }
       logSummary({
         downloaded,
         verified,
@@ -287,8 +300,13 @@ export const downloadCommand = new Command("download")
         durationMs,
       });
 
-      const reportStatus =
-        failed > 0 ? (downloaded > 0 ? "partial" : "aborted") : "success";
+      const reportStatus = isAborting
+        ? "aborted"
+        : failed > 0
+          ? downloaded > 0
+            ? "partial"
+            : "failed"
+          : "success";
       await writeReport(
         {
           status: reportStatus,
@@ -306,8 +324,10 @@ export const downloadCommand = new Command("download")
             name: matched[i].name,
             mimeType: matched[i].mimeType,
             size: matched[i].size,
-            outputPath: sanitizeOutputPath(
-              join(opts.output, matched[i].path, matched[i].name),
+            outputPath: join(
+              opts.output,
+              sanitizeOutputPath(matched[i].path),
+              sanitizePathSegment(matched[i].name)
             ),
             matchedBy: matched[i].matchedBy,
             status: r.status,
@@ -325,22 +345,27 @@ export const downloadCommand = new Command("download")
           unmatched,
           fuzzySuggestions: fuzzyMatches,
         },
-        opts.reportPath,
+        opts.reportPath
       );
 
-      if (failed > 0) process.exit(2);
+      process.off("SIGINT", handleSignal);
+      process.off("SIGTERM", handleSignal);
+
+      if (isAborting) {
+        process.exitCode = 130;
+        return;
+      }
+      if (failed > 0) {
+        process.exitCode = 2;
+      }
     } catch (err) {
       spinner.stop();
       logError(`Fatal error: ${(err as Error).message}`);
-      process.exit(1);
+      process.exitCode = 1;
     }
   });
 
-function buildMetadata(
-  email: string | null,
-  opts: Record<string, unknown>,
-  startTime: number,
-) {
+function buildMetadata(email: string | null, opts: Record<string, unknown>, startTime: number) {
   return {
     tool: "gdrive-dl",
     version: "1.2.0",
@@ -371,13 +396,18 @@ async function runWithConcurrency<T>(
   items: T[],
   limit: number,
   fn: (item: T) => Promise<void>,
+  checkAbort?: () => boolean
 ): Promise<void> {
   const queue = [...items];
   const active: Promise<void>[] = [];
 
   while (queue.length > 0 || active.length > 0) {
+    if (checkAbort?.()) {
+      queue.length = 0;
+    }
     while (queue.length > 0 && active.length < limit) {
-      const item = queue.shift()!;
+      const item = queue.shift();
+      if (!item) continue;
       const promise = fn(item).finally(() => {
         const idx = active.indexOf(promise);
         if (idx !== -1) active.splice(idx, 1);

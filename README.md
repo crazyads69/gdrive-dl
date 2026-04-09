@@ -1,5 +1,11 @@
 # gdrive-dl
 
+[![GitHub Release](https://img.shields.io/github/v/release/crazyads69/gdrive-dl?sort=semver)](https://github.com/crazyads69/gdrive-dl/releases)
+[![CI](https://github.com/crazyads69/gdrive-dl/actions/workflows/ci.yml/badge.svg)](https://github.com/crazyads69/gdrive-dl/actions/workflows/ci.yml)
+[![Bun](https://img.shields.io/badge/Bun-%E2%89%A51.3-black.svg?logo=bun)](https://bun.sh/)
+[![Platforms](https://img.shields.io/badge/Platforms-macOS%20%7C%20Linux%20%7C%20Windows-blue)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Batch download files from Google Drive by filename.
 
 ```
@@ -50,6 +56,10 @@ $ gdrive-dl download -u "https://drive.google.com/drive/folders/abc123" -f names
    - You can also set them via environment variables: `GDRIVEDL_OAUTH_CLIENT_ID` and `GDRIVEDL_OAUTH_CLIENT_SECRET`
 
 ## Installation
+
+### Download pre-compiled binary (Recommended)
+
+You can download the latest standalone executable for macOS, Linux, or Windows from the [Releases page](https://github.com/crazyads69/gdrive-dl/releases). These binaries do not require Bun or Node.js to be installed.
 
 ### From source
 
@@ -200,15 +210,29 @@ Reports are written to `~/.config/gdrive-dl/reports/YYYYMMDD-HHMMSS.json` by def
 
 ## Development
 
+Please refer to the [Contributing Guide](CONTRIBUTING.md) for detailed instructions on setting up your environment, running tests, and submitting pull requests.
+
+### Release Workflow
+
+This project uses an automated CI/CD pipeline for releases. 
+1. Develop features on `main` or feature branches.
+2. To trigger a new release, merge `main` into the `release` branch.
+3. GitHub Actions will automatically bump the patch version in `package.json`, create a Git tag, build all native binaries, and publish a new GitHub Release.
+4. *(Optional)* Re-sync the `release` branch back to `main` to keep the version numbers aligned.
+
 ```bash
 bun install
 bun run dev              # run directly
 bun run src/cli.ts auth   # test auth flow
-bun test                 # run tests (25 tests)
+bun test                 # run tests (29 tests)
 bun run lint             # lint with Biome
 bun run lint:fix         # auto-fix lint issues
 bun run build            # compile binary
 ```
+
+## Contributing
+
+We welcome contributions! Please see our [Code of Conduct](CODE_OF_CONDUCT.md) and [Contributing Guidelines](CONTRIBUTING.md) to get started. You can also view the architectural breakdown in the [WIKI](docs/WIKI.md) and [SPEC](docs/SPEC.md).
 
 ## License
 

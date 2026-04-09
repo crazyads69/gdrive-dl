@@ -75,7 +75,7 @@ export async function writeReport(report: DownloadReport, reportPath?: string): 
   const finalPath = reportPath ?? defaultPath;
 
   if (!reportPath && existsSync(finalPath)) {
-    logWarn(`Report file already exists. Use --overwrite to replace.`);
+    logWarn("Report file already exists. Use --overwrite to replace.");
     return;
   }
 
